@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FairFace · 数据查看器</title>
+<style>
+:root {
+  --bg:#0d1117;--surface:#161b22;--surface2:#22263a;--border:#30363d;
+  --accent:#6c63ff;--accent2:#a78bfa;--text:#e8eaf6;--muted:#7b82a8;
+  --green:#4ade80;--blue:#60a5fa;--purple:#c084fc;--orange:#fb923c;--red:#f87171;--teal:#39d353;
+  --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;}
+
+header{position:sticky;top:0;z-index:50;background:rgba(15,17,23,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.logo{font-size:17px;font-weight:700;letter-spacing:-.3px;white-space:nowrap;}
+.logo span{color:var(--accent2);}
+#stats-bar{font-size:12px;color:var(--muted);white-space:nowrap;}
+.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-left:auto;}
+.filters select,.filters input[type=search]{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:7px 12px;border-radius:8px;font-size:13px;outline:none;transition:border-color .15s;}
+.filters select:focus,.filters input[type=search]:focus{border-color:var(--accent);}
+.filters input[type=search]{width:180px;}
+.toggle-err{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none;}
+.toggle-err input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;}
+
+/* load */
+#load-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 65px);gap:16px;}
+.drop-zone{border:2px dashed var(--border);border-radius:20px;padding:48px 80px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;}
+.drop-zone:hover{border-color:var(--accent);background:rgba(108,99,255,.06);}
+.drop-zone h2{font-size:18px;font-weight:600;margin-bottom:8px;}
+.drop-zone p{font-size:13px;color:var(--muted);}
+.file-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;}
+.file-btn{padding:10px 24px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer;transition:border-color .15s;}
+.file-btn:hover{border-color:var(--accent);}
+.file-status{font-size:12px;color:var(--muted);}
+.file-status.ok{color:var(--green);}
+input[type=file]{display:none;}
+
+/* grid */
+#main{display:none;padding:20px 28px 0;}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;}
+.card:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(0,0,0,.4);border-color:var(--accent);}
+.card-img{position:relative;aspect-ratio:1;overflow:hidden;background:var(--surface2);}
+.card-img img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s;}
+.card:hover .card-img img{transform:scale(1.04);}
+.card-err-badge{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(248,113,113,.12);font-size:28px;}
+.card-body{padding:10px 12px 12px;}
+.card-id{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:7px;}
+.tags{display:flex;flex-wrap:wrap;gap:4px;}
+.tag{font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+.tag-g{background:rgba(96,165,250,.15);color:var(--blue);}
+.tag-r{background:rgba(192,132,252,.15);color:var(--purple);}
+.tag-a{background:rgba(74,222,128,.15);color:var(--green);}
+.tag-t{background:rgba(251,146,60,.15);color:var(--orange);}
+.tag-err{background:rgba(248,113,113,.15);color:var(--red);}
+.conf-bar{margin-top:8px;display:flex;flex-direction:column;gap:4px;}
+.conf-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
+.conf-row span:first-child{width:28px;}
+.conf-track{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.conf-fill{height:100%;border-radius:2px;}
+
+/* pagination */
+#pagination{display:none;justify-content:center;align-items:center;gap:14px;padding:24px;font-size:14px;color:var(--muted);}
+.pg-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;transition:background .15s;}
+.pg-btn:hover:not(:disabled){background:var(--surface);border-color:var(--accent);}
+.pg-btn:disabled{opacity:.3;cursor:default;}
+
+/* modal */
+#modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;}
+#modal.open{display:flex;}
+#modal-box{background:var(--surface);border:1px solid var(--border);border-radius:18px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:0 0 24px;}
+#modal-img{width:100%;aspect-ratio:1;object-fit:cover;display:block;border-radius:18px 18px 0 0;background:var(--surface2);}
+.modal-header{padding:18px 22px 0;display:flex;justify-content:space-between;align-items:flex-start;}
+.modal-id{font-size:15px;font-weight:600;word-break:break-all;}
+#close-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;flex-shrink:0;transition:color .15s;}
+#close-btn:hover{color:var(--text);}
+.modal-tags{padding:12px 22px;display:flex;flex-wrap:wrap;gap:6px;}
+.sec{padding:0 22px;margin-bottom:16px;}
+.sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;}
+.attr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;}
+.attr-card{background:var(--surface2);border-radius:10px;padding:12px;}
+.attr-card .lbl{font-size:11px;color:var(--muted);margin-bottom:4px;}
+.attr-card .val{font-size:15px;font-weight:600;}
+.attr-card .raw{font-size:11px;color:var(--muted);margin-top:2px;}
+.attr-card .confs{font-size:11px;color:var(--accent2);margin-top:4px;display:flex;flex-direction:column;gap:2px;}
+.detail-bars{display:flex;flex-direction:column;gap:6px;}
+.detail-row{display:flex;align-items:center;gap:10px;font-size:12px;}
+.detail-row .dl{width:140px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.detail-row .dt{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.detail-row .df{height:100%;border-radius:3px;}
+.detail-row .dp{width:38px;text-align:right;color:var(--muted);}
+.bio-box{background:var(--surface2);border-radius:10px;padding:12px;font-size:13px;color:var(--muted);line-height:1.6;word-break:break-all;max-height:100px;overflow-y:auto;}
+.err-box{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:10px;padding:12px;font-size:13px;color:var(--red);}
+.cats-box{display:flex;flex-wrap:wrap;gap:6px;}
+.src-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(161,227,255,.1);color:#61dafb;margin-left:4px;}
+
+/* tabs */
+.tab-nav{display:flex;gap:4px;margin-left:16px;}
+.tab-btn{padding:6px 16px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;transition:all .15s;}
+.tab-btn.active{background:var(--surface2);border-color:var(--border);color:var(--text);}
+.tab-btn:hover:not(.active){color:var(--text);}
+
+/* stats panel */
+#stats-panel{display:none;padding:28px 28px 40px;}
+.sp-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px;margin-bottom:20px;}
+.sp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;}
+.sp-card h4{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:16px;}
+.sp-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.sp-kv{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;}
+.sp-kv .v{font-size:28px;font-weight:700;color:var(--accent2);}
+.sp-kv .l{font-size:12px;color:var(--muted);margin-top:4px;}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;}
+.bar-row .bl{width:130px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+.bar-row .bt{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;}
+.bar-row .bf{height:100%;border-radius:4px;transition:width .4s;}
+.bar-row .bp{width:48px;text-align:right;color:var(--muted);font-size:12px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Fair<span>Face</span> · 数据查看器</div>
+  <div class="filters">
+    <select id="f-gender"><option value="">全部性别</option><option>男</option><option>女</option><option>unknown</option></select>
+    <select id="f-race"><option value="">全部人种</option><option>Asian</option><option>White/Caucasian</option><option>African American</option><option>Hispanic</option><option>unknown</option></select>
+    <select id="f-skin"><option value="">全部肤色</option><option>白皙肤色</option><option>白偏黄肤色</option><option>小麦肤色</option><option>棕色肤色</option><option>深色肤色</option><option>unknown</option></select>
+    <select id="f-age"><option value="">全部年龄</option><option>18岁以下</option><option>18-24</option><option>25-34</option><option>35-44</option><option>45-54</option><option>55-64</option><option>65岁及以上</option><option>unknown</option></select>
+    <input type="search" id="f-search" placeholder="搜索 ID / 达人类型…">
+    <select id="f-conf-dim"><option value="">置信度筛选…</option>
+      <option value="gender_vision_conf">性别视觉</option>
+      <option value="race_vision_conf">人种视觉</option>
+      <option value="age_range_vision_conf">年龄视觉</option>
+      <option value="skin_appearance_conf">肤色</option>
+      <option value="gender_llm_conf">性别LLM</option>
+      <option value="race_llm_conf">人种LLM</option>
+      <option value="age_range_llm_conf">年龄LLM</option>
+    </select>
+    <select id="f-conf-range"><option value="">全部区间</option>
+      <option value="0.9-1">≥ 90%（高置信）</option>
+      <option value="0.8-1">≥ 80%</option>
+      <option value="0.7-1">≥ 70%</option>
+      <option value="0.6-1">≥ 60%</option>
+      <option value="0-0.6">< 60%（低置信）</option>
+      <option value="0-0.5">< 50%（极低）</option>
+      <option value="0-0.7">< 70%</option>
+      <option value="0-0.8">< 80%</option>
+      <option value="0.6-0.8">60%-80%（中等）</option>
+      <option value="0.8-0.9">80%-90%</option>
+    </select>
+    <label class="toggle-err"><input type="checkbox" id="f-error"> 仅看错误</label>
+    <select id="f-sort">
+      <option value="">默认排序</option>
+      <optgroup label="── 视觉置信度 ──">
+        <option value="gender_vision_conf:desc">性别视觉置信度 ↓</option>
+        <option value="gender_vision_conf:asc">性别视觉置信度 ↑</option>
+        <option value="race_vision_conf:desc">人种视觉置信度 ↓</option>
+        <option value="race_vision_conf:asc">人种视觉置信度 ↑</option>
+        <option value="age_range_vision_conf:desc">年龄视觉置信度 ↓</option>
+        <option value="age_range_vision_conf:asc">年龄视觉置信度 ↑</option>
+        <option value="skin_appearance_conf:desc">肤色置信度 ↓</option>
+        <option value="skin_appearance_conf:asc">肤色置信度 ↑</option>
+      </optgroup>
+      <optgroup label="── LLM 置信度 ──">
+        <option value="gender_llm_conf:desc">性别 LLM 置信度 ↓</option>
+        <option value="gender_llm_conf:asc">性别 LLM 置信度 ↑</option>
+        <option value="race_llm_conf:desc">人种 LLM 置信度 ↓</option>
+        <option value="race_llm_conf:asc">人种 LLM 置信度 ↑</option>
+        <option value="age_range_llm_conf:desc">年龄 LLM 置信度 ↓</option>
+        <option value="age_range_llm_conf:asc">年龄 LLM 置信度 ↑</option>
+      </optgroup>
+    </select>
+  </div>
+  <span id="stats-bar"></span>
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tab-grid" onclick="switchTab('grid')">卡片视图</button>
+    <button class="tab-btn" id="tab-stats" onclick="switchTab('stats')">统计面板</button>
+  </div>
+</header>
+
+<div id="load-screen">
+  <div class="drop-zone" id="drop-zone" onclick="document.getElementById('input-result').click()">
+    <h2>加载数据文件</h2>
+    <p>拖拽 CSV 到此处，或点击选择文件</p>
+  </div>
+  <div class="file-row">
+    <div>
+      <button class="file-btn" onclick="document.getElementById('input-result').click()">选择 网红物料01_resul.csv</button>
+      <div class="file-status" id="status-result">未选择</div>
+      <input type="file" id="input-result" accept=".csv">
+    </div>
+  </div>
+</div>
+
+<div id="main"><div id="grid"></div></div>
+<div id="pagination">
+  <button class="pg-btn" id="prev-btn">← 上一页</button>
+  <span id="page-info"></span>
+  <button class="pg-btn" id="next-btn">下一页 →</button>
+</div>
+
+<div id="stats-panel">
+  <div class="sp-summary" id="sp-summary"></div>
+  <div class="sp-row" id="sp-charts"></div>
+</div>
+
+<div id="modal">
+  <div id="modal-box">
+    <img id="modal-img" src="" alt="">
+    <div class="modal-header">
+      <div class="modal-id" id="modal-id"></div>
+      <button id="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-tags" id="modal-tags"></div>
+    <div class="sec" id="modal-attrs"></div>
+    <div class="sec" id="modal-cats"></div>
+    <div class="sec" id="modal-videos"></div>
+    <div class="sec" id="modal-bio"></div>
+    <div class="sec" id="modal-err"></div>
+  </div>
+</div>
+
+<script>
+const PAGE_SIZE = 60;
+let allRows = [], filtered = [], page = 0;
+
+const PH = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'><rect fill='%2322263a' width='1' height='1'/></svg>`;
+
+// ── CSV 解析 ──────────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = [], re = /("(?:[^"]|"")*"|[^,\r\n]*)(,|\r?\n|$)/g;
+  let headers = null, cur = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    let val = m[1];
+    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1,-1).replace(/""/g,'"');
+    cur.push(val.trim());
+    if (m[2] !== ',') {
+      if (!headers) { headers = cur; }
+      else if (cur.some(v => v !== '')) {
+        const obj = {}; headers.forEach((h,i) => obj[h] = cur[i] ?? ''); rows.push(obj);
+      }
+      cur = [];
+    }
+    if (m[2] === '' || re.lastIndex >= text.length) break;
+  }
+  return rows;
+}
+
+function readFile(input) {
+  return new Promise(res => {
+    const file = input.files[0]; if (!file) return res(null);
+    const r = new FileReader();
+    // 读原始字节，自动判断编码：UTF-8(含BOM) → GBK（Excel中文Windows保存后的编码）
+    r.onload = e => {
+      const buf = e.target.result;
+      try {
+        res(new TextDecoder('utf-8', { fatal: true }).decode(buf));
+      } catch {
+        try {
+          res(new TextDecoder('gbk', { fatal: true }).decode(buf));
+        } catch {
+          res(new TextDecoder('utf-8').decode(buf));
+        }
+      }
+    };
+    r.readAsArrayBuffer(file);
+  });
+}
+
+// ── 文件加载 ──────────────────────────────────────────────────────────────────
+document.getElementById('input-result').addEventListener('change', async function() {
+  const text = await readFile(this);
+  if (!text) return;
+  loadCSVText(text, this.files[0]?.name || 'file');
+});
+
+// drag-and-drop support
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = ''; });
+dropZone.addEventListener('drop', async e => {
+  e.preventDefault();
+  dropZone.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const buf = await file.arrayBuffer();
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { try { text = new TextDecoder('gbk', { fatal: true }).decode(buf); } catch { text = new TextDecoder('utf-8').decode(buf); } }
+  loadCSVText(text, file.name);
+});
+
+async function loadCSVText(text, filename) {
+  const rows = parseCSV(text);
+  allRows = rows.map(r => {
+    let res = {};
+    try { res = JSON.parse(r.result || '{}'); } catch(e) {}
+    let inp = {};
+    try { inp = JSON.parse(r.input || '{}'); } catch(e) {}
+    return { _uid: r.creator_user_id, _input: inp, ...res };
+  });
+  document.getElementById('status-result').textContent = `✓ ${rows.length} 条`;
+  document.getElementById('status-result').className = 'file-status ok';
+  document.getElementById('load-screen').style.display = 'none';
+  document.getElementById('main').style.display = 'block';
+  document.getElementById('pagination').style.display = 'flex';
+  document.getElementById('tab-stats').disabled = false;
+  applyFilters();
+}
+
+// ── Avatar URL ────────────────────────────────────────────────────────────────
+function avatarUrl(row) {
+  const url = (row._input?.avatar_url || '').toString().trim();
+  return (url && url !== 'nan' && url !== 'None' && url.startsWith('http')) ? url : '';
+}
+
+// ── 过滤 ──────────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const g = document.getElementById('f-gender').value;
+  const r = document.getElementById('f-race').value;
+  const sk = document.getElementById('f-skin').value;
+  const a = document.getElementById('f-age').value;
+  const errOnly = document.getElementById('f-error').checked;
+  const q = document.getElementById('f-search').value.toLowerCase();
+  const sortVal = document.getElementById('f-sort').value;
+  const confDim = document.getElementById('f-conf-dim').value;
+  const confRange = document.getElementById('f-conf-range').value;
+
+  // 解析置信度区间
+  let confMin = null, confMax = null;
+  if (confDim && confRange) {
+    const [lo, hi] = confRange.split('-').map(Number);
+    confMin = lo; confMax = hi;
+  }
+
+  filtered = allRows.filter(row => {
+    if (g && row.gender !== g) return false;
+    if (r && row.race !== r) return false;
+    if (sk && row.skin_appearance !== sk) return false;
+    if (a && row.age_range !== a) return false;
+    if (errOnly && !row.error) return false;
+    if (q && !(row._uid||'').includes(q) && !(row.creator_type||'').toLowerCase().includes(q)) return false;
+    // 置信度区间筛选
+    if (confDim && confRange) {
+      const v = parseFloat(row[confDim]);
+      if (isNaN(v)) return false; // 无置信度的排除
+      if (v < confMin || v > confMax) return false;
+    }
+    return true;
+  });
+
+  // 排序
+  if (sortVal) {
+    const [sortKey, sortDir] = sortVal.split(':');
+    const asc = sortDir === 'asc';
+    filtered.sort((a, b) => {
+      const va = parseFloat(a[sortKey]);
+      const vb = parseFloat(b[sortKey]);
+      const na = isNaN(va), nb = isNaN(vb);
+      // null/NaN 值始终排到末尾
+      if (na && nb) return 0;
+      if (na) return 1;
+      if (nb) return -1;
+      return asc ? va - vb : vb - va;
+    });
+  }
+
+  page = 0; render();
+}
+['f-gender','f-race','f-skin','f-age','f-search','f-sort','f-conf-dim','f-conf-range'].forEach(id => document.getElementById(id).addEventListener('input', applyFilters));
+document.getElementById('f-error').addEventListener('change', applyFilters);
+
+// ── 渲染 ──────────────────────────────────────────────────────────────────────
+function pct(v) { return v != null ? Math.round(parseFloat(v)*100) : null; }
+function confColor(v) {
+  if (v == null) return '#484f58';
+  if (v >= 0.85) return 'var(--green)';
+  if (v >= 0.65) return 'var(--blue)';
+  return 'var(--orange)';
+}
+
+function render() {
+  const total = filtered.length;
+  const sortVal = document.getElementById('f-sort').value;
+  const [sortKey] = sortVal ? sortVal.split(':') : [''];
+
+  document.getElementById('stats-bar').textContent = `${total.toLocaleString()} / ${allRows.length.toLocaleString()} 条`;
+  document.getElementById('page-info').textContent = `${page+1} / ${Math.max(1,Math.ceil(total/PAGE_SIZE))} 页`;
+  document.getElementById('prev-btn').disabled = page === 0;
+  document.getElementById('next-btn').disabled = (page+1)*PAGE_SIZE >= total;
+
+  // 排序字段标签映射
+  const SORT_LABEL = {
+    gender_vision_conf: '性别视觉', race_vision_conf: '人种视觉',
+    age_range_vision_conf: '年龄视觉', skin_appearance_conf: '肤色',
+    gender_llm_conf: '性别LLM', race_llm_conf: '人种LLM', age_range_llm_conf: '年龄LLM',
+  };
+
+  const slice = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
+  document.getElementById('grid').innerHTML = slice.map((row, i) => {
+    const uid = row._uid || row.user_id || '';
+    const url = avatarUrl(row);
+    const hasErr = !!row.error;
+    const gp = pct(row.gender_vision_conf ?? row.gender_llm_conf);
+    const rp = pct(row.race_vision_conf ?? row.race_llm_conf);
+    const ap = pct(row.age_range_vision_conf ?? row.age_range_llm_conf);
+
+    // 当前排序字段的置信度高亮徽章
+    const sortBadge = sortKey && !hasErr ? (() => {
+      const v = parseFloat(row[sortKey]);
+      if (isNaN(v)) return `<span style="font-size:10px;color:var(--muted);background:var(--surface2);padding:2px 7px;border-radius:10px;margin-top:6px;display:inline-block">${SORT_LABEL[sortKey]||sortKey}: —</span>`;
+      const color = confColor(v);
+      return `<span style="font-size:11px;font-weight:600;color:${color};background:rgba(0,0,0,.25);padding:2px 8px;border-radius:10px;margin-top:6px;display:inline-block;border:1px solid ${color}40">${SORT_LABEL[sortKey]||sortKey} ${Math.round(v*100)}%</span>`;
+    })() : '';
+
+    return `<div class="card" onclick="openModal(${page*PAGE_SIZE+i})">
+      <div class="card-img">
+        <img src="${url||PH}" loading="lazy" onerror="this.src='${PH}'">
+        ${hasErr ? '<div class="card-err-badge">⚠</div>' : ''}
+      </div>
+      <div class="card-body">
+        <div class="card-id">${uid}</div>
+        <div class="tags">
+          ${hasErr
+            ? `<span class="tag tag-err">${row.error}</span>`
+            : `<span class="tag tag-g">${row.gender||'?'}</span>
+               <span class="tag tag-r">${row.race||'?'}</span>
+               ${row.skin_appearance && row.skin_appearance !== 'unknown' ? `<span class="tag tag-t" style="background:rgba(57,211,83,.12);color:var(--teal)">${row.skin_appearance}</span>` : ''}
+               <span class="tag tag-a">${row.age_range||'?'}</span>
+               ${row.creator_type ? `<span class="tag tag-t">${row.creator_type}</span>` : ''}`}
+        </div>
+        ${!hasErr ? `<div class="conf-bar">
+          <div class="conf-row"><span>性别</span><div class="conf-track"><div class="conf-fill" style="width:${gp??0}%;background:${confColor(row.gender_vision_conf??row.gender_llm_conf)}"></div></div><span>${gp!=null?gp+'%':'—'}</span></div>
+          <div class="conf-row"><span>人种</span><div class="conf-track"><div class="conf-fill" style="width:${rp??0}%;background:${confColor(row.race_vision_conf??row.race_llm_conf)}"></div></div><span>${rp!=null?rp+'%':'—'}</span></div>
+          <div class="conf-row"><span>年龄</span><div class="conf-track"><div class="conf-fill" style="width:${ap??0}%;background:${confColor(row.age_range_vision_conf??row.age_range_llm_conf)}"></div></div><span>${ap!=null?ap+'%':'—'}</span></div>
+          ${row.skin_appearance && row.skin_appearance !== 'unknown' ? (() => { const sp = pct(row.skin_appearance_conf); return `<div class="conf-row"><span>肤色</span><div class="conf-track"><div class="conf-fill" style="width:${sp??0}%;background:${confColor(row.skin_appearance_conf)}"></div></div><span>${sp!=null?sp+'%':'—'}</span></div>`; })() : ''}
+        </div>
+        ${sortBadge}` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('prev-btn').onclick = () => { page--; render(); scrollTo(0,0); };
+document.getElementById('next-btn').onclick = () => { page++; render(); scrollTo(0,0); };
+
+// ── Modal ──────────────────────────────────────────────────────────────────────
+function openModal(idx) {
+  const row = filtered[idx];
+  const uid = row._uid || row.user_id || '';
+  const inp = row._input || {};
+  const url = avatarUrl(row);
+  const hasErr = !!row.error;
+
+  document.getElementById('modal-img').src = url || PH;
+  document.getElementById('modal-id').textContent = uid;
+
+  // 标签
+  document.getElementById('modal-tags').innerHTML = hasErr
+    ? `<span class="tag tag-err">⚠ ${row.error}</span>`
+    : [
+        row.gender && `<span class="tag tag-g" style="font-size:13px;padding:4px 12px">${row.gender}</span>`,
+        row.race && `<span class="tag tag-r" style="font-size:13px;padding:4px 12px">${row.race}</span>`,
+        row.age_range && `<span class="tag tag-a" style="font-size:13px;padding:4px 12px">${row.age_range}</span>`,
+        row.creator_type && `<span class="tag tag-t" style="font-size:13px;padding:4px 12px">${row.creator_type}</span>`,
+      ].filter(Boolean).join('');
+
+  // 三个核心属性
+  if (!hasErr) {
+    const attrs = [
+      {
+        label:'性别',
+        val:row.gender,
+        vc:row.gender_vision_conf,
+        lc:row.gender_llm_conf,
+        visionLabel:row.gender_vision_label,
+        llmLabel:row.gender_llm_label,
+        src:row.gender_source,
+        color:'var(--blue)',
+      },
+      {
+        label:'人种',
+        val:row.race,
+        vc:row.race_vision_conf,
+        lc:row.race_llm_conf,
+        visionLabel:row.race_vision_label,
+        llmLabel:row.race_llm_label,
+        src:row.race_source,
+        color:'var(--purple)',
+      },
+      {
+        label:'肤色',
+        val:row.skin_appearance,
+        vc:row.skin_appearance_conf,
+        lc:null,
+        visionLabel:null,
+        llmLabel:null,
+        src:row.skin_appearance_source||'ita',
+        color:'var(--teal)',
+      },
+      {
+        label:'年龄段',
+        val:row.age_range,
+        vc:row.age_range_vision_conf,
+        lc:row.age_range_llm_conf,
+        visionLabel:row.age_range_vision_label,
+        llmLabel:row.age_range_llm_label,
+        src:row.age_range_source,
+        color:'var(--green)',
+      },
+      {
+        label:'可出镜',
+        val:row.can_appear_on_camera == null ? '—' : (row.can_appear_on_camera === true || row.can_appear_on_camera === 'true' ? '✅ 是' : '❌ 否'),
+        vc:null, lc:null, visionLabel:null, llmLabel:null, src:null,
+        color: (row.can_appear_on_camera === true || row.can_appear_on_camera === 'true') ? 'var(--green)' : 'var(--red)',
+      },
+      {
+        label:'可配音',
+        val:row.can_do_voiceover == null ? '—' : (row.can_do_voiceover === true || row.can_do_voiceover === 'true' ? '✅ 是' : '❌ 否'),
+        vc:null, lc:null, visionLabel:null, llmLabel:null, src:null,
+        color: (row.can_do_voiceover === true || row.can_do_voiceover === 'true') ? 'var(--green)' : 'var(--red)',
+      },
+    ];
+    document.getElementById('modal-attrs').innerHTML = `
+      <h3>识别属性</h3>
+      <div class="attr-grid">
+        ${attrs.map(a => `<div class="attr-card">
+          <div class="lbl">${a.label}</div>
+          <div class="val" style="color:${a.color}">${a.val||'unknown'}</div>
+          <div class="confs">
+            ${a.vc != null ? `<span>视觉: ${Math.round(a.vc*100)}%</span>` : ''}
+            ${a.lc != null ? `<span>LLM: ${Math.round(a.lc*100)}%</span>` : ''}
+            ${a.visionLabel ? `<span>视觉标签: ${a.visionLabel}</span>` : ''}
+            ${a.llmLabel ? `<span>LLM标签: ${a.llmLabel}</span>` : ''}
+          </div>
+          <div class="raw"><span class="src-badge">${a.src||'—'}</span></div>
+        </div>`).join('')}
+      </div>`;
+
+    // 选品分类 + 达人类型
+    const cats = row.product_categories;
+    const catList = Array.isArray(cats) ? cats : (typeof cats === 'string' ? tryParseArr(cats) : []);
+    document.getElementById('modal-cats').innerHTML = `
+      <h3>达人类型 · 选品分类</h3>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;color:var(--orange);font-weight:600">${row.creator_type||'—'}</span>
+        <span style="font-size:12px;color:var(--muted);margin-left:8px">置信度 ${Math.round((row.creator_type_llm_conf||0)*100)}%</span>
+      </div>
+      <div class="cats-box">
+        ${catList.map(c => `<span class="tag tag-t">${c}</span>`).join('')||'<span style="color:var(--muted);font-size:12px">暂无</span>'}
+        ${catList.length ? `<span style="font-size:11px;color:var(--muted);align-self:center">置信度 ${Math.round((row.product_categories_llm_conf||0)*100)}%</span>` : ''}
+      </div>`;
+  } else {
+    document.getElementById('modal-attrs').innerHTML = '';
+    document.getElementById('modal-cats').innerHTML = '';
+  }
+
+  // 视频标题（来自输入）
+  const videos = Array.isArray(inp.top10_video_titles) ? inp.top10_video_titles : tryParseArr(inp.top10_video_titles || '');
+  document.getElementById('modal-videos').innerHTML = videos.length ? `
+    <h3>Top 视频标题</h3>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      ${videos.slice(0,5).map(v => `<div style="font-size:12px;color:var(--muted);padding:4px 8px;background:var(--surface2);border-radius:6px">${v}</div>`).join('')}
+    </div>` : '';
+
+  // 输入信息（username / hashtags / category）
+  const infoItems = [
+    inp.username && `<span style="font-size:12px;color:var(--muted)">@${inp.username}</span>`,
+    inp.top_hashtags && `<span style="font-size:12px;color:var(--teal)">${inp.top_hashtags}</span>`,
+    inp.category && `<span class="tag tag-t" style="font-size:11px">${inp.category}</span>`,
+    inp.product_category && `<span class="tag tag-r" style="font-size:11px">${inp.product_category}</span>`,
+  ].filter(Boolean);
+  document.getElementById('modal-bio').innerHTML = `
+    ${infoItems.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${infoItems.join('')}</div>` : ''}
+    ${inp.bio && inp.bio !== 'nan' ? `<h3>简介</h3><div class="bio-box">${inp.bio}</div>` : ''}
+  `;
+
+  // 错误
+  document.getElementById('modal-err').innerHTML = hasErr
+    ? `<div class="err-box">⚠ ${row.error}</div>` : '';
+
+  document.getElementById('modal').classList.add('open');
+}
+
+function tryParseArr(v) {
+  try { const r = JSON.parse(v); return Array.isArray(r) ? r.filter(Boolean) : []; } catch { return []; }
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Tab 切换 ──────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  const isGrid = tab === 'grid';
+  document.getElementById('tab-grid').classList.toggle('active', isGrid);
+  document.getElementById('tab-stats').classList.toggle('active', !isGrid);
+  document.getElementById('main').style.display = isGrid ? 'block' : 'none';
+  document.getElementById('pagination').style.display = isGrid ? 'flex' : 'none';
+  document.getElementById('stats-panel').style.display = isGrid ? 'none' : 'block';
+  if (!isGrid) renderStats();
+}
+
+// ── 统计面板 ──────────────────────────────────────────────────────────────────
+function countBy(rows, key) {
+  const m = {};
+  rows.forEach(r => { const v = r[key] || 'unknown'; m[v] = (m[v] || 0) + 1; });
+  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+}
+
+const CHART_COLORS = [
+  'var(--accent)','var(--blue)','var(--green)','var(--orange)',
+  'var(--purple)','var(--teal)','var(--red)','var(--accent2)',
+  '#f59e0b','#10b981','#3b82f6','#ef4444',
+];
+
+function buildBarChart(title, entries, total) {
+  const rows = entries.map(([ label, count ], i) => {
+    const pct = total ? Math.round(count / total * 100) : 0;
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    return `<div class="bar-row">
+      <div class="bl" title="${label}">${label}</div>
+      <div class="bt"><div class="bf" style="width:${pct}%;background:${color}"></div></div>
+      <div class="bp">${count.toLocaleString()} (${pct}%)</div>
+    </div>`;
+  }).join('');
+  return `<div class="sp-card"><h4>${title}</h4>${rows}</div>`;
+}
+
+function renderStats() {
+  const rows = allRows;
+  const total = rows.length;
+  const validRows = rows.filter(r => !r.error);
+  const errCount = rows.filter(r => !!r.error).length;
+  const unknownCount = validRows.filter(r =>
+    ['gender','race','age_range'].some(k => !r[k] || r[k] === 'unknown')
+  ).length;
+
+  // 摘要数字
+  document.getElementById('sp-summary').innerHTML = [
+    { v: total.toLocaleString(), l: '总记录数' },
+    { v: validRows.length.toLocaleString(), l: '有效结果' },
+    { v: unknownCount.toLocaleString(), l: 'Unknown 数' },
+    { v: errCount.toLocaleString(), l: '错误数' },
+  ].map(({ v, l }) => `<div class="sp-kv"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  // 各维度分布
+  function confBuckets(rows, key) {
+    const b = {'≥90%':0,'75-90%':0,'60-75%':0,'50-60%':0,'<50%':0,'null':0};
+    rows.forEach(r => {
+      const v = parseFloat(r[key]);
+      if (isNaN(v)) { b['null']++; return; }
+      if (v >= 0.90) b['≥90%']++;
+      else if (v >= 0.75) b['75-90%']++;
+      else if (v >= 0.60) b['60-75%']++;
+      else if (v >= 0.50) b['50-60%']++;
+      else b['<50%']++;
+    });
+    return Object.entries(b).filter(([,v]) => v > 0);
+  }
+
+  const charts = [
+    ['性别分布', countBy(validRows, 'gender')],
+    ['人种分布', countBy(validRows, 'race')],
+    ['肤色分布 (ITA)', countBy(validRows, 'skin_appearance')],
+    ['年龄段分布', countBy(validRows, 'age_range')],
+    ['达人类型分布', countBy(validRows, 'creator_type')],
+    ['识别来源 (gender_source)', countBy(validRows, 'gender_source')],
+    ['性别视觉置信度分布', confBuckets(validRows, 'gender_vision_conf')],
+    ['性别 LLM 置信度分布', confBuckets(validRows, 'gender_llm_conf')],
+    ['人种视觉置信度分布', confBuckets(validRows, 'race_vision_conf')],
+    ['人种 LLM 置信度分布', confBuckets(validRows, 'race_llm_conf')],
+    ['年龄视觉置信度分布', confBuckets(validRows, 'age_range_vision_conf')],
+    ['年龄 LLM 置信度分布', confBuckets(validRows, 'age_range_llm_conf')],
+    ['肤色置信度分布', confBuckets(validRows, 'skin_appearance_conf')],
+  ];
+
+  document.getElementById('sp-charts').innerHTML = charts
+    .map(([title, entries]) => buildBarChart(title, entries, validRows.length))
+    .join('');
+}
+</script>
+</body>
+</html>
